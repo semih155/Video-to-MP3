@@ -1,4 +1,4 @@
-cat > ~/muzik_isleyici.sh << 'EOF'
+mkdir -p ~/Video-to-MP3 && cat > ~/Video-to-MP3/muzik_isleyici.sh << 'EOF'
 #!/data/data/com.termux/files/usr/bin/bash
 
 [ -f "$HOME/.muzik_ayarlari.conf" ] && source "$HOME/.muzik_ayarlari.conf"
@@ -7,15 +7,16 @@ KILIT_DOSYA="$HOME/.muzik_script.lock"
 if [ -f "$KILIT_DOSYA" ]; then
     eski_pid=$(cat "$KILIT_DOSYA" 2>/dev/null)
     if [ -n "$eski_pid" ] && kill -0 "$eski_pid" 2>/dev/null; then
-        echo "⚠️  UYARI: Script zaten başka bir oturumda çalışıyor!"
+        echo -e "\e[1;31m⚠️  UYARI: Script zaten başka bir oturumda çalışıyor!\e[0m"
         exit 1
     fi
 fi
 echo $$ > "$KILIT_DOSYA"
 trap 'rm -f "$KILIT_DOSYA"' EXIT
 
-RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
-BLUE='\033[0;34m'; MAGENTA='\033[0;35m'; CYAN='\033[0;36m'; RESET='\033[0m'
+# Renk Tanımlamaları
+RED='\e[1;31m'; GREEN='\e[1;32m'; YELLOW='\e[1;33m'; BLUE='\e[1;34m'
+MAGENTA='\e[1;35m'; CYAN='\e[1;36m'; WHITE='\e[1;37m'; RESET='\e[0m'
 HATA_LOG="$HOME/muzik_hata_log.txt"
 
 _kaydet_ayarlar() {
@@ -34,17 +35,14 @@ _ilerleme_goster() {
     local bar=""
     for ((i=0; i<dolu; i++)); do bar+="█"; done
     for ((i=0; i<bos; i++));  do bar+="░"; done
-    printf "\r  [%s] %3d%%  (%d/%d)" "$bar" "$yuzde" "$mevcut" "$toplam"
+    printf "\r  ${CYAN}[%s]${RESET} ${WHITE}%3d%%${RESET}  (%d/%d)" "$bar" "$yuzde" "$mevcut" "$toplam"
 }
 
 _kapak_jpg_hazirla() {
     KAPAK_JPG=""
     [ -z "$VARSAYILAN_RESIM" ] || [ ! -f "$VARSAYILAN_RESIM" ] && return 1
     local hedef="$HOME/.muzik_kapak_cache.jpg"
-    
-    ffmpeg -i "$VARSAYILAN_RESIM" -vf "scale='min(1280,iw)':-2" \
-        -frames:v 1 "$hedef" -y -loglevel quiet 2>/dev/null
-    
+    ffmpeg -i "$VARSAYILAN_RESIM" -vf "scale='min(1280,iw)':-2" -frames:v 1 "$hedef" -y -loglevel quiet 2>/dev/null
     [ -f "$hedef" ] && { KAPAK_JPG="$hedef"; return 0; }
     return 1
 }
@@ -52,39 +50,30 @@ _kapak_jpg_hazirla() {
 _klasor_sec_oneri() {
     local baslik="$1"
     local son_deger="$2"
-
-    echo -e "\n${YELLOW}[ $baslik ]${RESET}"
-    echo -e "  📌 Klasör Seçenekleri:"
-    echo -e "  [v] VidMate İndirmeleri  ${GREEN}(🔥 En Çok Kullanılan)${RESET}"
-    echo -e "  [s] SnapTube İndirmeleri"
-    echo -e "  [m] Telefonun Ana Müzik Klasörü (Music)"
-    echo -e "  [o] Özel Dizin Yolu Gir"
-    echo -e "  [x] Geri Dön"
+    echo -e "\n${YELLOW}╭━━ [ $baslik ]${RESET}"
+    echo -e "${YELLOW}┃${RESET}  ${CYAN}[1]${RESET} VidMate İndirmeleri  ${GREEN}(🔥 En Çok Kullanılan)${RESET}"
+    echo -e "${YELLOW}┃${RESET}  ${CYAN}[2]${RESET} SnapTube İndirmeleri"
+    echo -e "${YELLOW}┃${RESET}  ${CYAN}[3]${RESET} Telefonun Ana Müzik Klasörü (Music)"
+    echo -e "${YELLOW}┃${RESET}  ${CYAN}[4]${RESET} Özel Dizin Yolu Gir"
+    echo -e "${YELLOW}┃${RESET}  ${RED}[0]${RESET} Geri Dön"
     if [ -n "$son_deger" ]; then
-        echo -e "  ${CYAN}[Enter] Son kullandığın klasörle devam et: $son_deger${RESET}"
+        echo -e "${YELLOW}┃${RESET}  ${MAGENTA}[Enter]${RESET} Son kullanılan klasör: $son_deger"
     fi
-    read -p "Seçiminizi yapın: " _src
+    echo -e "${YELLOW}╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+    read -p " Seçiminiz: " _src
 
     case "$_src" in
         "")
-            if [ -n "$son_deger" ]; then
-                SECILEN_KLASOR="$son_deger"
-            else
-                echo -e "${RED}Kayıtlı klasör yok! Lütfen bir harf seçin.${RESET}"; SECILEN_KLASOR=""; return 1
-            fi
-            ;;
-        v|V) SECILEN_KLASOR="/storage/emulated/0/VidMate/download" ;;
-        s|S) SECILEN_KLASOR="/storage/emulated/0/snaptube/download/SnapTube Video" ;;
-        m|M) SECILEN_KLASOR="/storage/emulated/0/Music" ;;
-        o|O)
-           read -p "Dizin yolunu girin: " _custom
-           if [ -z "$_custom" ] || [ ! -d "$_custom" ]; then
-               echo -e "${RED}Geçersiz dizin!${RESET}"; SECILEN_KLASOR=""; return 1
-           fi
-           SECILEN_KLASOR="$_custom"
-           ;;
-        x|X) return 2 ;;
-        *) echo -e "${RED}Geçersiz seçim!${RESET}"; SECILEN_KLASOR=""; return 1 ;;
+            if [ -n "$son_deger" ]; then SECILEN_KLASOR="$son_deger"
+            else echo -e "${RED}❌ Kayıtlı klasör yok! Seçim yapın.${RESET}"; return 1; fi ;;
+        1) SECILEN_KLASOR="/storage/emulated/0/VidMate/download" ;;
+        2) SECILEN_KLASOR="/storage/emulated/0/snaptube/download/SnapTube Video" ;;
+        3) SECILEN_KLASOR="/storage/emulated/0/Music" ;;
+        4) read -p "Dizin yolunu girin: " _custom
+           if [ -z "$_custom" ] || [ ! -d "$_custom" ]; then echo -e "${RED}❌ Geçersiz dizin!${RESET}"; return 1; fi
+           SECILEN_KLASOR="$_custom" ;;
+        0) return 2 ;;
+        *) echo -e "${RED}❌ Geçersiz seçim!${RESET}"; return 1 ;;
     esac
     return 0
 }
@@ -92,19 +81,14 @@ _klasor_sec_oneri() {
 mp3_donustur_menu() {
     while true; do
         clear
-        echo -e "${CYAN}========================================${RESET}"
-        echo -e "${CYAN}        Video -> MP3 Dönüştürme${RESET}"
-        echo -e "${CYAN}========================================${RESET}"
-
+        echo -e "${MAGENTA}━━━━━━━🌟 VIDEO -> MP3 DÖNÜŞTÜRÜCÜ 🌟━━━━━━━${RESET}"
         if [ -n "$SON_MP3_KAYNAK" ]; then
-            echo -e "  ${YELLOW}━━━ Hafızadaki Son Ayarların ━━━${RESET}"
-            echo -e "  Klasör: $SON_MP3_KAYNAK"
-            echo -e "  Kalite: ${SON_MP3_KALITE:-'320k'}"
-            echo ""
-            echo -e "  👉 ${GREEN}[Enter]  Aynen Devam Et (Hızlı & Önerilen Mod)${RESET}"
-            echo -e "  👉 ${CYAN}[d]      Ayarları Sıfırla (Klasör/Kalite Değiştir)${RESET}"
-            echo -e "  👉 ${RED}[x]      Ana Menüye Dön${RESET}"
-            read -p "  Hangi adımla ilerleyelim?: " hizli_sec
+            echo -e "  ${YELLOW}📂 Son Kullanılan Klasör:${RESET} $SON_MP3_KAYNAK"
+            echo -e "  ${YELLOW}⚡ Ses Kalitesi          :${RESET} ${SON_MP3_KALITE:-'320k'}\n"
+            echo -e "  ${GREEN}[Enter]${RESET} Aynen Devam Et ${GREEN}(Hızlı Mod)${RESET}"
+            echo -e "  ${CYAN}[d]${RESET}     Ayarları Sıfırla (Klasör/Kalite Değiştir)"
+            echo -e "  ${RED}[x]${RESET}     Geri Dön"
+            read -p "  Seçiminiz: " hizli_sec
             case "$hizli_sec" in
                 "") : ;; 
                 x|X) return ;;
@@ -120,14 +104,15 @@ mp3_donustur_menu() {
             [ $ret -ne 0 ] && { sleep 1; continue; }
             SON_MP3_KAYNAK="$SECILEN_KLASOR"
 
-            echo -e "\n${YELLOW}[ Ses Kalitesi Seçimi ]${RESET}"
-            echo -e "  👉 ${GREEN}[Enter] 320k (Önerilen - En Net, Stüdyo Kalitesi Ses)${RESET}"
-            echo -e "     [192]   192k (Orta Kalite - Standart)"
-            echo -e "     [128]   128k (Düşük Kalite - Boyutu Küçük Olur)"
-            read -p "Kalite Seçiminiz: " q
+            echo -e "\n${YELLOW}╭━━ [ Ses Kalitesi Seçimi ]${RESET}"
+            echo -e "${YELLOW}┃${RESET}  ${GREEN}[1] 320k (Önerilen - En Yüksek Stüdyo Kalitesi)${RESET}"
+            echo -e "${YELLOW}┃${RESET}  [2] 192k (Standart Kalite)"
+            echo -e "${YELLOW}┃${RESET}  [3] 128k (Düşük Kalite - Küçük Boyut)"
+            echo -e "${YELLOW}╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+            read -p " Seçiminiz [Önerilen için Enter]: " q
             case "$q" in
-                128) SON_MP3_KALITE="128k" ;;
-                192) SON_MP3_KALITE="192k" ;;
+                2) SON_MP3_KALITE="192k" ;;
+                3) SON_MP3_KALITE="128k" ;;
                 *) SON_MP3_KALITE="320k" ;;
             esac
             _kaydet_ayarlar
@@ -135,19 +120,15 @@ mp3_donustur_menu() {
 
         VIDEO_LISTESI="$HOME/.mp3_donustur_tmp.txt"
         > "$VIDEO_LISTESI"
-        if [[ -d "$SON_MP3_KAYNAK" ]]; then
-            find "$SON_MP3_KAYNAK" -maxdepth 1 -type f \
-                \( -iname "*.mp4" -o -iname "*.mkv" -o -iname "*.webm" \) >> "$VIDEO_LISTESI"
-        fi
+        [ -d "$SON_MP3_KAYNAK" ] && find "$SON_MP3_KAYNAK" -maxdepth 1 -type f \( -iname "*.mp4" -o -iname "*.mkv" -o -iname "*.webm" \) >> "$VIDEO_LISTESI"
 
         toplam=$(wc -l < "$VIDEO_LISTESI")
         if [[ "$toplam" -eq 0 ]]; then
-            echo -e "${RED}  Seçilen klasörde dönüştürülecek video bulunamadı!${RESET}"
-            rm -f "$VIDEO_LISTESI"; SON_MP3_KAYNAK=""; sleep 2; continue
+            echo -e "${RED}❌ Klasörde video bulunamadı!${RESET}"; rm -f "$VIDEO_LISTESI"; SON_MP3_KAYNAK=""; sleep 2; continue
         fi
 
         clear
-        echo -e "${CYAN} Dönüştürme Başlatıldı, Lütfen Bekleyin...${RESET}"
+        echo -e "${CYAN}🚀 Dönüştürme Başlatıldı, Lütfen Bekleyin...${RESET}"
         _kapak_jpg_hazirla
 
         basarili=0; atlanan=0; hatali=0; sayac=0
@@ -157,44 +138,30 @@ mp3_donustur_menu() {
             isim_base="$(basename "${video%.*}")"
             cikti_dosya="$(dirname "$video")/${isim_base}.mp3"
 
-            if [[ -f "$cikti_dosya" ]]; then
-                ((atlanan++)); _ilerleme_goster "$sayac" "$toplam"; continue
-            fi
+            if [[ -f "$cikti_dosya" ]]; then ((atlanan++)); _ilerleme_goster "$sayac" "$toplam"; continue; fi
 
             _ilerleme_goster "$sayac" "$toplam"
             ffmpeg_err=$(mktemp)
 
             if [ -n "$KAPAK_JPG" ]; then
-                ffmpeg -i "$video" -i "$KAPAK_JPG" \
-                    -map 0:a:0 -map 1:0 \
-                    -acodec libmp3lame -ab "$SON_MP3_KALITE" -ar 44100 \
-                    -c:v:0 mjpeg -metadata:s:v title="Album cover" -metadata:s:v comment="Cover (front)" \
-                    "$cikti_dosya" -y -loglevel error 2> "$ffmpeg_err"
+                ffmpeg -i "$video" -i "$KAPAK_JPG" -map 0:a:0 -map 1:0 -acodec libmp3lame -ab "$SON_MP3_KALITE" -ar 44100 -c:v:0 mjpeg -metadata:s:v title="Album cover" -metadata:s:v comment="Cover (front)" "$cikti_dosya" -y -loglevel error 2> "$ffmpeg_err"
                 sonuc=$?
-            else
-                sonuc=1
-            fi
+            else sonuc=1; fi
 
             if [ $sonuc -ne 0 ]; then
                 rm -f "$cikti_dosya"
-                ffmpeg -i "$video" -vn -acodec libmp3lame -ab "$SON_MP3_KALITE" -ar 44100 \
-                    "$cikti_dosya" -y -loglevel error 2> "$ffmpeg_err"
+                ffmpeg -i "$video" -vn -acodec libmp3lame -ab "$SON_MP3_KALITE" -ar 44100 "$cikti_dosya" -y -loglevel error 2> "$ffmpeg_err"
                 sonuc=$?
             fi
 
-            if [ $sonuc -eq 0 ]; then
-                ((basarili++))
-            else
-                ((hatali++)); rm -f "$cikti_dosya"
-                echo "$video -> Başarısız" >> "$HATA_LOG"
-            fi
+            if [ $sonuc -eq 0 ]; then ((basarili++))
+            else ((hatali++)); rm -f "$cikti_dosya"; echo "$video -> Başarısız" >> "$HATA_LOG"; fi
             rm -f "$ffmpeg_err"
         done < "$VIDEO_LISTESI"
 
         rm -f "$VIDEO_LISTESI"
-        echo -e "\n\n${GREEN}✓ Dönüşen: $basarili${RESET} | ${BLUE}→ Zaten Var (Atlanan): $atlanan${RESET} | ${RED}✗ Hatalı: $hatali${RESET}"
-        echo -e "\n${YELLOW}💡 Öneri: Ana menüye hızlıca dönmek için [Enter]'a bas.${RESET}"
-        read -p "" _
+        echo -e "\n\n${GREEN}📊 ÖZET: ✓ Dönüşen: $basarili${RESET} | ${BLUE}→ Atlanan: $atlanan${RESET} | ${RED}✗ Hatalı: $hatali${RESET}"
+        read -p "Geri dönmek için [Enter]'a bas..." _
         return
     done
 }
@@ -202,13 +169,9 @@ mp3_donustur_menu() {
 muzik_kapak_menu() {
     while true; do
         clear
-        echo -e "${CYAN}========================================${RESET}"
-        echo -e "${CYAN}       Müziklere Kapak Resmi Ekle${RESET}"
-        echo -e "${CYAN}========================================${RESET}"
-
+        echo -e "${MAGENTA}━━━━━━━🎨 MÜZİKLERE KAPAK RESMİ EKLE ━━━━━━━${RESET}"
         if [ -z "$VARSAYILAN_RESIM" ] || [ ! -f "$VARSAYILAN_RESIM" ]; then
-            echo -e "${RED}HATA: Önce Ana Menüden bir albüm kapağı ayarlamalısın!${RESET}"
-            sleep 2; return
+            echo -e "${RED}❌ HATA: Önce ana menüden bir albüm kapağı resmi seçmelisin!${RESET}"; sleep 2; return
         fi
 
         _klasor_sec_oneri "Müzik Klasörünü Seçin" "$SON_MUZIK_KLASOR"
@@ -223,13 +186,12 @@ muzik_kapak_menu() {
         toplam=$(wc -l < "$MUZIK_LISTESI")
 
         if [[ "$toplam" -eq 0 ]]; then
-            echo -e "${RED}Seçilen klasörün içinde ses dosyası bulunamadı!${RESET}"
-            rm -f "$MUZIK_LISTESI"; SON_MUZIK_KLASOR=""; sleep 2; continue
+            echo -e "${RED}❌ Klasörde müzik dosyası bulunamadı!${RESET}"; rm -f "$MUZIK_LISTESI"; SON_MUZIK_KLASOR=""; sleep 2; continue
         fi
 
         _kapak_jpg_hazirla
         sayac=0; basarili=0; hatali=0
-        echo -e "${GREEN}Kapak resimleri müzik kutularına uyumlu şekilde gömülüyor...${RESET}"
+        echo -e "${GREEN}Kapak resimleri müzik dosyalarına işleniyor...${RESET}"
 
         while IFS= read -r muzik; do
             [[ -z "$muzik" ]] && continue
@@ -240,27 +202,18 @@ muzik_kapak_menu() {
             temp_muzik="$(dirname "$muzik")/.tmp_mzk_$$_${sayac}.${uzanti}"
 
             if [[ "${uzanti,,}" == "mp3" ]]; then
-                ffmpeg -i "$muzik" -i "$KAPAK_JPG" -map 0:a:0 -map 1:0 -acodec copy -c:v:0 mjpeg \
-                    -metadata:s:v title="Album cover" -metadata:s:v comment="Cover (front)" \
-                    "$temp_muzik" -y -loglevel quiet
+                ffmpeg -i "$muzik" -i "$KAPAK_JPG" -map 0:a:0 -map 1:0 -acodec copy -c:v:0 mjpeg -metadata:s:v title="Album cover" -metadata:s:v comment="Cover (front)" "$temp_muzik" -y -loglevel quiet
             else
-                ffmpeg -i "$muzik" -i "$KAPAK_JPG" -map 0:a:0 -map 1:0 -acodec copy -c:v:0 mjpeg \
-                    -disposition:v:0 attached_pic "$temp_muzik" -y -loglevel quiet
+                ffmpeg -i "$muzik" -i "$KAPAK_JPG" -map 0:a:0 -map 1:0 -acodec copy -c:v:0 mjpeg -disposition:v:0 attached_pic "$temp_muzik" -y -loglevel quiet
             fi
 
-            if [[ $? -eq 0 ]]; then
-                mv "$temp_muzik" "$muzik"
-                ((basarili++))
-            else
-                rm -f "$temp_muzik"
-                ((hatali++))
-            fi
+            if [[ $? -eq 0 ]]; then mv "$temp_muzik" "$muzik"; ((basarili++))
+            else rm -f "$temp_muzik"; ((hatali++)); fi
         done < "$MUZIK_LISTESI"
 
         rm -f "$MUZIK_LISTESI"
-        echo -e "\n\n${GREEN}✓ Kapak Eklendi: $basarili Dosya${RESET} | ${RED}✗ Hata: $hatali Dosya${RESET}"
-        echo -e "\n${YELLOW}💡 Öneri: Ana menüye hızlıca dönmek için [Enter]'a bas.${RESET}"
-        read -p "" _
+        echo -e "\n\n${GREEN}📊 ÖZET: ✓ Kapak Eklendi: $basarili${RESET} | ${RED}✗ Hata: $hatali${RESET}"
+        read -p "Geri dönmek için [Enter]'a bas..." _
         return
     done
 }
@@ -268,49 +221,54 @@ muzik_kapak_menu() {
 ana_menu() {
     while true; do
         clear
-        echo "========================================="
-        echo "          MÜZİK VE SES KUTUSU            "
-        echo "========================================="
-        echo "  Mevcut Kapak : ${VARSAYILAN_RESIM:-'Ayarlanmamış'}"
-        echo "  Hafıza Klasör: ${SON_MP3_KAYNAK:-'Kayıt yok'}"
-        echo "  Kayıtlı Kalite: ${SON_MP3_KALITE:-'Kayıt yok'}"
-        echo "-----------------------------------------"
-        echo "  📌 Akıllı Öneri Menüsü:"
-        echo "  [v] Video -> MP3 Dönüştür   ${GREEN}(🔥 Önerilen - Hafızalı Hızlı Mod)${RESET}"
-        echo "  [k] Müziklere Kapak Ekle    ${YELLOW}(Müzik çalarda resimli gösterir)${RESET}"
-        echo "  [r] Albüm Kapağı Seç/Değiştir"
-        echo "  [s] Hafızayı Sıfırla"
-        echo "  [x] Çıkış"
-        echo "========================================="
-        read -p "Yapmak istediğiniz işlem (Harf girin): " secim
+        # Şekilli Şukullu Rengarenk ASCII Yasin/Samiullah Başlığı
+        echo -e "${CYAN}╔════════════════════════════════════════════════════════════╗${RESET}"
+        echo -e "${GREEN}  ____    _    __  __ ___ _   _ _   _ _        _    _   _   ${RESET}"
+        echo -e "${GREEN} / ___|  / \  |  \/  |_ _| | | | | | | |      / \  | | | |  ${RESET}"
+        echo -e "${GREEN} \___ \ / _ \ | |\/| || || | | | | | | |     / _ \ | |_| |  ${RESET}"
+        echo -e "${GREEN}  ___) / ___ \| |  | || || |_| | |_| | |___ / ___ \|  _  |  ${RESET}"
+        echo -e "${GREEN} |____/_/   \_\_|  |_|____\___/ \___/|_____/_/   \_\_| |_|  ${RESET}"
+        echo -e "${CYAN}╚════════════════════════════════════════════════════════════╝${RESET}"
+        echo -e "                  ${MAGENTA}🎶 MÜZİK VE SES KUTUSU 🎶${RESET}\n"
+        
+        # Durum Çubuğu bilgileri
+        echo -e "  ${WHITE}🖼️  Mevcut Kapak   :${RESET} ${YELLOW}${VARSAYILAN_RESIM:-'Ayarlanmamış'}${RESET}"
+        echo -e "  ${WHITE}📂 Hafıza Klasör   :${RESET} ${BLUE}${SON_MP3_KAYNAK:-'Kayıt yok'}${RESET}"
+        echo -e "  ${WHITE}⚡ Kayıtlı Kalite  :${RESET} ${CYAN}${SON_MP3_KALITE:-'Kayıt yok'}${RESET}"
+        echo -e "${CYAN}--------------------------------------------------------------${RESET}"
+        echo -e "  📌 ${YELLOW}İŞLEM MENÜSÜ:${RESET}"
+        echo -e "  ${GREEN}[1]${RESET} Video -> MP3 Dönüştür        ${GREEN}(🔥 Hafızalı Hızlı Mod)${RESET}"
+        echo -e "  ${GREEN}[2]${RESET} Müziklere Albüm Kapağı Ekle  ${YELLOW}(Müzik çalarda resimli gösterir)${RESET}"
+        echo -e "  ${GREEN}[3]${RESET} Albüm Kapağı Resmi Seç / Değiştir"
+        echo -e "  ${GREEN}[4]${RESET} Bütün Hafıza Kayıtlarını Sıfırla"
+        echo -e "  ${RED}[0]${RESET} Güvenli Çıkış"
+        echo -e "${CYAN}==============================================================${RESET}"
+        read -p " Yapmak istediğiniz işlem numarasını girin: " secim
 
         case $secim in
-            v|V) mp3_donustur_menu ;;
-            k|K) muzik_kapak_menu ;;
-            r|R)
-                read -p "Gömülecek resmin tam yolunu girin: " yeni_r
+            1) mp3_donustur_menu ;;
+            2) muzik_kapak_menu ;;
+            3)  read -p "Gömülecek resmin tam yolunu girin: " yeni_r
                 if [ -f "$yeni_r" ]; then
                     VARSAYILAN_RESIM="$yeni_r"
                     _kaydet_ayarlar
-                    echo "Albüm kapağı başarıyla kaydedildi."
-                else
-                    echo "Hata: Belirttiğiniz dosya yolu bulunamadı!"
-                fi
-                sleep 1
-                ;;
-            s|S)
-                rm -f "$HOME/.muzik_ayarlari.conf"
+                    echo -e "${GREEN}✓ Albüm kapağı başarıyla kaydedildi.${RESET}"
+                else echo -e "${RED}❌ Hata: Belirttiğiniz dosya yolu bulunamadı!${RESET}"; fi
+                sleep 1.5 ;;
+            4)  rm -f "$HOME/.muzik_ayarlari.conf"
                 VARSAYILAN_RESIM=""; SON_MP3_KAYNAK=""; SON_MP3_KALITE=""; SON_MUZIK_KLASOR=""
-                echo "Bütün hafıza kayıtları başarıyla sıfırlandı."
-                sleep 1
-                ;;
-            x|X) echo "Çıkış yapılıyor..."; exit 0 ;;
-            *) echo "Geçersiz harf! Lütfen menüdeki harflerden birini seçin."; sleep 1 ;;
+                echo -e "${YELLOW}✓ Bütün hafıza kayıtları temizlendi.${RESET}"
+                sleep 1.5 ;;
+            0) echo -e "${CYAN}Güle güle kanka! Çıkış yapıldı.${RESET}"; exit 0 ;;
+            *) echo -e "${RED}Geçersiz numara! Lütfen menüdeki rakamlardan seçin.${RESET}"; sleep 1.5 ;;
         esac
     done
 }
 
 ana_menu
 EOF
-chmod +x ~/muzik_isleyici.sh
-echo -e "\n✅ Dosya başarıyla oluşturuldu!"
+chmod +x ~/Video-to-MP3/muzik_isleyici.sh
+grep -q 'alias mp3=' ~/.bashrc || echo "alias mp3='bash ~/Video-to-MP3/muzik_isleyici.sh'" >> ~/.bashrc
+source ~/.bashrc
+echo -e "\n\e[1;32m✅ YENİ ŞEKİLLİ MENÜ BAŞARIYLA AYARLANDI!\e[0m\n👉 Şimdi sadece \e[1;36mmp3\e[0m yazıp Enter'a bas kanka!"
+
