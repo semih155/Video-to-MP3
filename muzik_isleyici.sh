@@ -1,20 +1,7 @@
-mkdir -p ~/Video-to-MP3 && cat > ~/Video-to-MP3/muzik_isleyici.sh << 'EOF'
 #!/data/data/com.termux/files/usr/bin/bash
 
 [ -f "$HOME/.muzik_ayarlari.conf" ] && source "$HOME/.muzik_ayarlari.conf"
 
-KILIT_DOSYA="$HOME/.muzik_script.lock"
-if [ -f "$KILIT_DOSYA" ]; then
-    eski_pid=$(cat "$KILIT_DOSYA" 2>/dev/null)
-    if [ -n "$eski_pid" ] && kill -0 "$eski_pid" 2>/dev/null; then
-        echo -e "\e[1;31m⚠️  UYARI: Script zaten başka bir oturumda çalışıyor!\e[0m"
-        exit 1
-    fi
-fi
-echo $$ > "$KILIT_DOSYA"
-trap 'rm -f "$KILIT_DOSYA"' EXIT
-
-# Renk Tanımlamaları
 RED='\e[1;31m'; GREEN='\e[1;32m'; YELLOW='\e[1;33m'; BLUE='\e[1;34m'
 MAGENTA='\e[1;35m'; CYAN='\e[1;36m'; WHITE='\e[1;37m'; RESET='\e[0m'
 HATA_LOG="$HOME/muzik_hata_log.txt"
@@ -221,7 +208,6 @@ muzik_kapak_menu() {
 ana_menu() {
     while true; do
         clear
-        # Şekilli Şukullu Rengarenk ASCII Yasin/Samiullah Başlığı
         echo -e "${CYAN}╔════════════════════════════════════════════════════════════╗${RESET}"
         echo -e "${GREEN}  ____    _    __  __ ___ _   _ _   _ _        _    _   _   ${RESET}"
         echo -e "${GREEN} / ___|  / \  |  \/  |_ _| | | | | | | |      / \  | | | |  ${RESET}"
@@ -231,7 +217,6 @@ ana_menu() {
         echo -e "${CYAN}╚════════════════════════════════════════════════════════════╝${RESET}"
         echo -e "                  ${MAGENTA}🎶 MÜZİK VE SES KUTUSU 🎶${RESET}\n"
         
-        # Durum Çubuğu bilgileri
         echo -e "  ${WHITE}🖼️  Mevcut Kapak   :${RESET} ${YELLOW}${VARSAYILAN_RESIM:-'Ayarlanmamış'}${RESET}"
         echo -e "  ${WHITE}📂 Hafıza Klasör   :${RESET} ${BLUE}${SON_MP3_KAYNAK:-'Kayıt yok'}${RESET}"
         echo -e "  ${WHITE}⚡ Kayıtlı Kalite  :${RESET} ${CYAN}${SON_MP3_KALITE:-'Kayıt yok'}${RESET}"
@@ -266,9 +251,4 @@ ana_menu() {
 }
 
 ana_menu
-EOF
-chmod +x ~/Video-to-MP3/muzik_isleyici.sh
-grep -q 'alias mp3=' ~/.bashrc || echo "alias mp3='bash ~/Video-to-MP3/muzik_isleyici.sh'" >> ~/.bashrc
-source ~/.bashrc
-echo -e "\n\e[1;32m✅ YENİ ŞEKİLLİ MENÜ BAŞARIYLA AYARLANDI!\e[0m\n👉 Şimdi sadece \e[1;36mmp3\e[0m yazıp Enter'a bas kanka!"
 
