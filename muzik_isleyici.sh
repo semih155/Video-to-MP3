@@ -5,6 +5,7 @@
 RED='\e[1;31m'; GREEN='\e[1;32m'; YELLOW='\e[1;33m'; BLUE='\e[1;34m'
 MAGENTA='\e[1;35m'; CYAN='\e[1;36m'; WHITE='\e[1;37m'; RESET='\e[0m'
 HATA_LOG="$HOME/muzik_hata_log.txt"
+PREFIX="〖ذال فیلم تقدیم میکندょ〗"
 
 _kaydet_ayarlar() {
     cat > "$HOME/.muzik_ayarlari.conf" << CONF
@@ -38,8 +39,8 @@ _klasor_sec_oneri() {
     local baslik="$1"
     local son_deger="$2"
     echo -e "\n${YELLOW}╭━━ [ $baslik ]${RESET}"
-    echo -e "${YELLOW}┃${RESET}  ${CYAN}[1]${RESET} VidMate İndirmeleri  ${GREEN}(🔥 En Çok Kullanılan)${RESET}"
-    echo -e "${YELLOW}┃${RESET}  ${CYAN}[2]${RESET} SnapTube İndirmeleri"
+    echo -e "${YELLOW}┃${RESET}  ${CYAN}[1]${RESET} UC Downloads Videos  ${GREEN}(🔥 Senin Klasör)${RESET}"
+    echo -e "${YELLOW}┃${RESET}  ${CYAN}[2]${RESET} VidMate İndirmeleri"
     echo -e "${YELLOW}┃${RESET}  ${CYAN}[3]${RESET} Telefonun Ana Müzik Klasörü (Music)"
     echo -e "${YELLOW}┃${RESET}  ${CYAN}[4]${RESET} Özel Dizin Yolu Gir"
     echo -e "${YELLOW}┃${RESET}  ${RED}[0]${RESET} Geri Dön"
@@ -53,8 +54,8 @@ _klasor_sec_oneri() {
         "")
             if [ -n "$son_deger" ]; then SECILEN_KLASOR="$son_deger"
             else echo -e "${RED}❌ Kayıtlı klasör yok! Seçim yapın.${RESET}"; return 1; fi ;;
-        1) SECILEN_KLASOR="/storage/emulated/0/VidMate/download" ;;
-        2) SECILEN_KLASOR="/storage/emulated/0/snaptube/download/SnapTube Video" ;;
+        1) SECILEN_KLASOR="/storage/emulated/0/Download/UCDownloads/video" ;;
+        2) SECILEN_KLASOR="/storage/emulated/0/VidMate/download" ;;
         3) SECILEN_KLASOR="/storage/emulated/0/Music" ;;
         4) read -p "Dizin yolunu girin: " _custom
            if [ -z "$_custom" ] || [ ! -d "$_custom" ]; then echo -e "${RED}❌ Geçersiz dizin!${RESET}"; return 1; fi
@@ -117,13 +118,20 @@ mp3_donustur_menu() {
         clear
         echo -e "${CYAN}🚀 Dönüştürme Başlatıldı, Lütfen Bekleyin...${RESET}"
         _kapak_jpg_hazirla
+        > "$HATA_LOG"
 
         basarili=0; atlanan=0; hatali=0; sayac=0
         while IFS= read -r video; do
             [[ -z "$video" ]] && continue
             sayac=$((sayac + 1))
+            
             isim_base="$(basename "${video%.*}")"
-            cikti_dosya="$(dirname "$video")/${isim_base}.mp3"
+            # Eğer ismin başında zaten prefix varsa tekrar eklemesin
+            if [[ "$isim_base" == "$PREFIX"* ]]; then
+                cikti_dosya="$(dirname "$video")/${isim_base}.mp3"
+            else
+                cikti_dosya="$(dirname "$video")/${PREFIX}${isim_base}.mp3"
+            fi
 
             if [[ -f "$cikti_dosya" ]]; then ((atlanan++)); _ilerleme_goster "$sayac" "$toplam"; continue; fi
 
@@ -133,7 +141,9 @@ mp3_donustur_menu() {
             if [ -n "$KAPAK_JPG" ]; then
                 ffmpeg -i "$video" -i "$KAPAK_JPG" -map 0:a:0 -map 1:0 -acodec libmp3lame -ab "$SON_MP3_KALITE" -ar 44100 -c:v:0 mjpeg -metadata:s:v title="Album cover" -metadata:s:v comment="Cover (front)" "$cikti_dosya" -y -loglevel error 2> "$ffmpeg_err"
                 sonuc=$?
-            else sonuc=1; fi
+            else
+                sonuc=1
+            fi
 
             if [ $sonuc -ne 0 ]; then
                 rm -f "$cikti_dosya"
@@ -141,8 +151,13 @@ mp3_donustur_menu() {
                 sonuc=$?
             fi
 
-            if [ $sonuc -eq 0 ]; then ((basarili++))
-            else ((hatali++)); rm -f "$cikti_dosya"; echo "$video -> Başarısız" >> "$HATA_LOG"; fi
+            if [ $sonuc -eq 0 ]; then 
+                ((basarili++))
+            else 
+                ((hatali++))
+                rm -f "$cikti_dosya"
+                echo "$video -> Başarısız" >> "$HATA_LOG"
+            fi
             rm -f "$ffmpeg_err"
         done < "$VIDEO_LISTESI"
 
