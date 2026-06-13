@@ -16,16 +16,6 @@ SON_MUZIK_KLASOR="$SON_MUZIK_KLASOR"
 CONF
 }
 
-_ilerleme_goster() {
-    local mevcut=$1 toplam=$2
-    local yuzde=$(( mevcut * 100 / toplam ))
-    local dolu=$(( yuzde / 5 )) bos=$(( 20 - yuzde / 5 ))
-    local bar=""
-    for ((i=0; i<dolu; i++)); do bar+="█"; done
-    for ((i=0; i<bos; i++));  do bar+="░"; done
-    printf "\r  ${CYAN}[%s]${RESET} ${WHITE}%3d%%${RESET}  (%d/%d)" "$bar" "$yuzde" "$mevcut" "$toplam"
-}
-
 _kapak_jpg_hazirla() {
     KAPAK_JPG=""
     [ -z "$VARSAYILAN_RESIM" ] || [ ! -f "$VARSAYILAN_RESIM" ] && return 1
@@ -106,13 +96,8 @@ mp3_donustur_menu() {
             _kaydet_ayarlar
         fi
 
-        VIDEO_LISTESI="$HOME/.mp3_donustur_tmp.txt"
-        > "$VIDEO_LISTESI"
-        [ -d "$SON_MP3_KAYNAK" ] && find "$SON_MP3_KAYNAK" -maxdepth 1 -type f \( -iname "*.mp4" -o -iname "*.mkv" -o -iname "*.webm" \) >> "$VIDEO_LISTESI"
-
-        toplam=$(wc -l < "$VIDEO_LISTESI")
-        if [[ "$toplam" -eq 0 ]]; then
-            echo -e "${RED}❌ Klasörde video bulunamadı!${RESET}"; rm -f "$VIDEO_LISTESI"; SON_MP3_KAYNAK=""; sleep 2; continue
+        if [ ! -d "$SON_MP3_KAYNAK" ]; then
+            echo -e "${RED}❌ Klasör bulunamadı!${RESET}"; SON_MP3_KAYNAK=""; sleep 2; continue
         fi
 
         clear
@@ -120,48 +105,56 @@ mp3_donustur_menu() {
         _kapak_jpg_hazirla
         > "$HATA_LOG"
 
-        basarili=0; atlanan=0; hatali=0; sayac=0
-        while IFS= read -r video; do
-            [[ -z "$video" ]] && continue
-            sayac=$((sayac + 1))
-            
-            isim_base="$(basename "${video%.*}")"
-            # Eğer ismin başında zaten prefix varsa tekrar eklemesin
-            if [[ "$isim_base" == "$PREFIX"* ]]; then
-                cikti_dosya="$(dirname "$video")/${isim_base}.mp3"
-            else
-                cikti_dosya="$(dirname "$video")/${PREFIX}${isim_base}.mp3"
-            fi
+        export PREFIX SON_MP3_KALITE KAPAK_JPG HATA_LOG
+        basarili=0; atlanan=0; hatali=0
 
-            if [[ -f "$cikti_dosya" ]]; then ((atlanan++)); _ilerleme_goster "$sayac" "$toplam"; continue; fi
+        # Karakter sorununu kökten çözen find-exec mekanizması
+        while IFS=':' read -r durum; do
+            case "$durum" in
+                "OK") ((basarili++)) ;;
+                "SKIP") ((atlanan++)) ;;
+                "ERR") ((hatali++)) ;;
+            esac
+            printf "\r  ${CYAN}[Processing]${RESET} ✓ Başarılı: %d | → Atlanan: %d | ✗ Hatalı: %d" "$basarili" "$atlanan" "$hatali"
+        done < <(find "$SON_MP3_KAYNAK" -maxdepth 1 -type f \( -iname "*.mp4" -o -iname "*.mkv" -o -iname "*.webm" \) -exec bash -c '
+            for video; do
+                dizin="$(dirname "$video")"
+                isim_base="$(basename "${video%.*}")"
+                
+                if [[ "$isim_base" == "$PREFIX"* ]]; then
+                    cikti_dosya="$dizin/${isim_base}.mp3"
+                else
+                    cikti_dosya="$dizin/${PREFIX}${isim_base}.mp3"
+                fi
 
-            _ilerleme_goster "$sayac" "$toplam"
-            ffmpeg_err=$(mktemp)
+                if [[ -f "$cikti_dosya" ]]; then
+                    echo "SKIP"
+                    continue
+                fi
 
-            if [ -n "$KAPAK_JPG" ]; then
-                ffmpeg -i "$video" -i "$KAPAK_JPG" -map 0:a:0 -map 1:0 -acodec libmp3lame -ab "$SON_MP3_KALITE" -ar 44100 -c:v:0 mjpeg -metadata:s:v title="Album cover" -metadata:s:v comment="Cover (front)" "$cikti_dosya" -y -loglevel error 2> "$ffmpeg_err"
-                sonuc=$?
-            else
-                sonuc=1
-            fi
+                if [ -n "$KAPAK_JPG" ] && [ -f "$KAPAK_JPG" ]; then
+                    ffmpeg -i "$video" -i "$KAPAK_JPG" -map 0:a:0 -map 1:0 -acodec libmp3lame -ab "$SON_MP3_KALITE" -ar 44100 -c:v:0 mjpeg -metadata:s:v title="Album cover" -metadata:s:v comment="Cover (front)" "$cikti_dosya" -y -loglevel quiet 2>/dev/null
+                    sonuc=$?
+                else
+                    sonuc=1
+                fi
 
-            if [ $sonuc -ne 0 ]; then
-                rm -f "$cikti_dosya"
-                ffmpeg -i "$video" -vn -acodec libmp3lame -ab "$SON_MP3_KALITE" -ar 44100 "$cikti_dosya" -y -loglevel error 2> "$ffmpeg_err"
-                sonuc=$?
-            fi
+                if [ $sonuc -ne 0 ]; then
+                    rm -f "$cikti_dosya"
+                    ffmpeg -i "$video" -vn -acodec libmp3lame -ab "$SON_MP3_KALITE" -ar 44100 "$cikti_dosya" -y -loglevel quiet 2>/dev/null
+                    sonuc=$?
+                fi
 
-            if [ $sonuc -eq 0 ]; then 
-                ((basarili++))
-            else 
-                ((hatali++))
-                rm -f "$cikti_dosya"
-                echo "$video -> Başarısız" >> "$HATA_LOG"
-            fi
-            rm -f "$ffmpeg_err"
-        done < "$VIDEO_LISTESI"
+                if [ $sonuc -eq 0 ]; then
+                    echo "OK"
+                else
+                    rm -f "$cikti_dosya"
+                    echo "$video -> Başarısız" >> "$HATA_LOG"
+                    echo "ERR"
+                fi
+            done
+        ' _ {} +)
 
-        rm -f "$VIDEO_LISTESI"
         echo -e "\n\n${GREEN}📊 ÖZET: ✓ Dönüşen: $basarili${RESET} | ${BLUE}→ Atlanan: $atlanan${RESET} | ${RED}✗ Hatalı: $hatali${RESET}"
         read -p "Geri dönmek için [Enter]'a bas..." _
         return
@@ -183,37 +176,41 @@ muzik_kapak_menu() {
         SON_MUZIK_KLASOR="$SECILEN_KLASOR"
         _kaydet_ayarlar
 
-        MUZIK_LISTESI="$HOME/.muzik_kapak_tmp.txt"
-        find "$SON_MUZIK_KLASOR" -maxdepth 1 -type f \( -iname "*.mp3" -o -iname "*.m4a" \) > "$MUZIK_LISTESI"
-        toplam=$(wc -l < "$MUZIK_LISTESI")
-
-        if [[ "$toplam" -eq 0 ]]; then
-            echo -e "${RED}❌ Klasörde müzik dosyası bulunamadı!${RESET}"; rm -f "$MUZIK_LISTESI"; SON_MUZIK_KLASOR=""; sleep 2; continue
-        fi
-
-        _kapak_jpg_hazirla
-        sayac=0; basarili=0; hatali=0
+        clear
         echo -e "${GREEN}Kapak resimleri müzik dosyalarına işleniyor...${RESET}"
+        _kapak_jpg_hazirla
 
-        while IFS= read -r muzik; do
-            [[ -z "$muzik" ]] && continue
-            sayac=$((sayac + 1))
-            _ilerleme_goster "$sayac" "$toplam"
+        export KAPAK_JPG
+        basarili=0; hatali=0
 
-            uzanti="${muzik##*.}"
-            temp_muzik="$(dirname "$muzik")/.tmp_mzk_$$_${sayac}.${uzanti}"
+        while IFS=':' read -r durum; do
+            case "$durum" in
+                "OK") ((basarili++)) ;;
+                "ERR") ((hatali++)) ;;
+            esac
+            printf "\r  ${CYAN}[İşleniyor]${RESET} ✓ Başarılı: %d | ✗ Hatalı: %d" "$basarili" "$hatali"
+        done < <(find "$SON_MUZIK_KLASOR" -maxdepth 1 -type f \( -iname "*.mp3" -o -iname "*.m4a" \) -exec bash -c '
+            for muzik; do
+                dizin="$(dirname "$muzik")"
+                uzanti="${muzik##*.}"
+                temp_muzik="$dizin/.tmp_mzk_$$\_${uzanti}"
 
-            if [[ "${uzanti,,}" == "mp3" ]]; then
-                ffmpeg -i "$muzik" -i "$KAPAK_JPG" -map 0:a:0 -map 1:0 -acodec copy -c:v:0 mjpeg -metadata:s:v title="Album cover" -metadata:s:v comment="Cover (front)" "$temp_muzik" -y -loglevel quiet
-            else
-                ffmpeg -i "$muzik" -i "$KAPAK_JPG" -map 0:a:0 -map 1:0 -acodec copy -c:v:0 mjpeg -disposition:v:0 attached_pic "$temp_muzik" -y -loglevel quiet
-            fi
+                if [[ "${uzanti,,}" == "mp3" ]]; then
+                    ffmpeg -i "$muzik" -i "$KAPAK_JPG" -map 0:a:0 -map 1:0 -acodec copy -c:v:0 mjpeg -metadata:s:v title="Album cover" -metadata:s:v comment="Cover (front)" "$temp_muzik" -y -loglevel quiet 2>/dev/null
+                else
+                    ffmpeg -i "$muzik" -i "$KAPAK_JPG" -map 0:a:0 -map 1:0 -acodec copy -c:v:0 mjpeg -disposition:v:0 attached_pic "$temp_muzik" -y -loglevel quiet 2>/dev/null
+                fi
 
-            if [[ $? -eq 0 ]]; then mv "$temp_muzik" "$muzik"; ((basarili++))
-            else rm -f "$temp_muzik"; ((hatali++)); fi
-        done < "$MUZIK_LISTESI"
+                if [[ $? -eq 0 ]]; then
+                    mv "$temp_muzik" "$muzik"
+                    echo "OK"
+                else
+                    rm -f "$temp_muzik"
+                    echo "ERR"
+                fi
+            done
+        ' _ {} +)
 
-        rm -f "$MUZIK_LISTESI"
         echo -e "\n\n${GREEN}📊 ÖZET: ✓ Kapak Eklendi: $basarili${RESET} | ${RED}✗ Hata: $hatali${RESET}"
         read -p "Geri dönmek için [Enter]'a bas..." _
         return
