@@ -2,7 +2,11 @@
 
 [ -f "$HOME/.muzik_ayarlari.conf" ] && source "$HOME/.muzik_ayarlari.conf"
 
-RED='\e[1;31m'; GREEN='\e[1;32m'; YELLOW='\e[1;33m'; BLUE='\e[1;34m'; MAGENTA='\e[1;35m'; CYAN='\e[1;36m'; WHITE='\e[1;37m'; RESET='\e[0m'
+# RENGARENK DJ KABİNİ RENKLERİ
+RED='\e[1;31m'; GREEN='\e[1;32m'; YELLOW='\e[1;33m'; BLUE='\e[1;34m'
+MAGENTA='\e[1;35m'; CYAN='\e[1;36m'; WHITE='\e[1;37m'; RESET='\e[0m'
+BOLD='\e[1m'; BLINK='\e[5m'; BG_PURPLE='\e[45m'; TEXT_BLACK='\e[30m'
+
 PREFIX="〖ذال فیلم تقدیم میکندょ〗"
 
 _kaydet_ayarlar() { cat > "$HOME/.muzik_ayarlari.conf" << CONF
@@ -11,65 +15,124 @@ SON_KLASOR="$SON_KLASOR"
 CONF
 }
 
+# ŞEKİLLİ ŞÜKÜRLÜ NEON İLERLEME BARI
+_ilerleme_goster() {
+    local m=$1 t=$2; local y=$(( m * 100 / t ))
+    local d=$(( y / 5 )); local b=$(( 20 - d ))
+    
+    # Renkli dalga efekti
+    local bar=""
+    for ((i=0; i<d; i++)); do 
+        if [ $i -lt 5 ]; then bar+="${RED}█";
+        elif [ $i -lt 10 ]; then bar+="${YELLOW}█";
+        elif [ $i -lt 15 ]; then bar+="${GREEN}█";
+        else bar+="${CYAN}█"; fi
+    done
+    for ((i=0; i<b; i++)); do bar+="${WHITE}░"; done
+    
+    printf "\r  ${BOLD}${MAGENTA}🔮 PROCESSING:${RESET} [ %s${RESET} ] ${BOLD}${YELLOW}%3d%%${RESET} ${WHITE}(%d/%d)${RESET}" "$bar" "$y" "$m" "$t"
+}
+
 _klasor_sec() {
-    echo -e "\n${YELLOW}Klasör Yolunu Girin (Örn: /storage/emulated/0/Download/Muziklerim):${RESET}"
-    read -p ">> " _yol
-    if [ -d "$_yol" ]; then
-        SON_KLASOR="$_yol"
-        _kaydet_ayarlar
-        return 0
-    else
-        echo -e "${RED}Böyle bir klasör yok kanka!${RESET}"; return 1
-    fi
+    echo -e "\n${BOLD}${CYAN}👉 Klasör Yolunu Girin (Örn: /storage/emulated/0/Music):${RESET}"
+    read -p " ❯❯ " _yol
+    if [ -d "$_yol" ]; then SON_KLASOR="$_yol"; _kaydet_ayarlar; return 0; else echo -e "${BLINK}${RED}❌ KLASÖR BULUNAMADI KANKA!${RESET}"; sleep 1.5; return 1; fi
 }
 
 isim_temizle_ve_etiketle() {
     _klasor_sec || return
-    echo -e "${CYAN}Sadece '$SON_KLASOR' içindeki müzikler işleniyor...${RESET}"
+    mapfile -t dosyalar < <(find "$SON_KLASOR" -maxdepth 1 -type f \( -iname "*.mp3" -o -iname "*.m4a" \))
+    toplam=${#dosyalar[@]}; [[ $toplam -eq 0 ]] && { echo -e "${RED}İçeride müzik yok!${RESET}"; sleep 1; return; }
     
-    # Sadece seçilen klasörde çalışır, alt dizinlere girmez (-maxdepth 1)
-    find "$SON_KLASOR" -maxdepth 1 -type f \( -iname "*.mp3" -o -iname "*.m4a" \) | while read -r muzik; do
-        dizin="$(dirname "$muzik")"
-        dosya_adi="$(basename "$muzik")"
-        uzanti="${dosya_adi##*.}"
-        temiz_ad=$(echo "${dosya_adi%.*}" | sed -E "s/\([0-9]+\)//g" | sed "s/〖[^〗]*〗//g" | sed "s/ょ//g" | sed -E "s/^[[:space:]:-]+//g" | sed -E "s/[[:space:]:-]+$//g")
+    basarili=0; sayac=0
+    echo -e "\n${BOLD}${YELLOW}✨ İsimler pürüzsüz hale getiriliyor...${RESET}\n"
+    for muzik in "${dosyalar[@]}"; do
+        ((sayac++)); dizin="$(dirname "$muzik")"; dosya_adi="$(basename "$muzik")"; uzanti="${dosya_adi##*.}"
+        temiz=$(echo "${dosya_adi%.*}" | sed -E "s/\([0-9]+\)//g" | sed "s/〖[^〗]*〗//g" | sed "s/ょ//g" | sed -E "s/^[[:space:]:-]+//g" | sed -E "s/[[:space:]:-]+$//g")
+        yeni_tam_yol="$dizin/${PREFIX}${temiz}.${uzanti}"
         
-        yeni_ad="${PREFIX}${temiz_ad}.${uzanti}"
-        yeni_tam_yol="$dizin/$yeni_ad"
-
         if [ "$muzik" != "$yeni_tam_yol" ]; then
-            mv "$muzik" "$yeni_tam_yol"
-            ffmpeg -i "$yeni_tam_yol" -c copy -metadata title="${PREFIX}${temiz_ad}" -y -loglevel quiet "${yeni_tam_yol}_tmp.${uzanti}" && mv "${yeni_tam_yol}_tmp.${uzanti}" "$yeni_tam_yol"
+            mv "$muzik" "$yeni_tam_yol" 2>/dev/null
+            ffmpeg -i "$yeni_tam_yol" -c copy -metadata title="${PREFIX}${temiz}" -y -loglevel quiet "${yeni_tam_yol}_tmp.${uzanti}" && mv "${yeni_tam_yol}_tmp.${uzanti}" "$yeni_tam_yol"
+            ((basarili++))
         fi
+        _ilerleme_goster $sayac $toplam
     done
-    echo -e "${GREEN}✓ İşlem tamamlandı!${RESET}"; sleep 2
+    echo -e "\n\n${BOLD}${GREEN}🎉 BAŞARIYLA TAMAMLANDI! $basarili Dosya Yenilendi.${RESET}"; sleep 2.5
+}
+
+komple_temizlik_yap() {
+    _klasor_sec || return
+    mapfile -t dosyalar < <(find "$SON_KLASOR" -maxdepth 1 -type f \( -iname "*.mp3" -o -iname "*.m4a" \))
+    toplam=${#dosyalar[@]}; [[ $toplam -eq 0 ]] && { echo -e "${RED}İçeride müzik yok!${RESET}"; sleep 1; return; }
+    
+    basarili=0; sayac=0
+    echo -e "\n${BOLD}${BLINK}${RED}🔥 ESKİ İSİMLER TAMAMEN KAZINIYOR...${RESET}\n"
+    
+    for muzik in "${dosyalar[@]}"; do
+        ((sayac++)); dizin="$(dirname "$muzik")"; dosya_adi="$(basename "$muzik")"; uzanti="${dosya_adi##*.}"
+        yeni_tam_yol="$dizin/${PREFIX}.${uzanti}"
+        
+        if [ -f "$yeni_tam_yol" ] && [ "$muzik" != "$yeni_tam_yol" ]; then
+            yeni_tam_yol="$dizin/${PREFIX}_${sayac}.${uzanti}"
+        fi
+        
+        if [ "$muzik" != "$yeni_tam_yol" ]; then
+            mv "$muzik" "$yeni_tam_yol" 2>/dev/null
+            ffmpeg -i "$yeni_tam_yol" -c copy -metadata title="${PREFIX}" -y -loglevel quiet "${yeni_tam_yol}_tmp.${uzanti}" && mv "${yeni_tam_yol}_tmp.${uzanti}" "$yeni_tam_yol"
+            ((basarili++))
+        fi
+        _ilerleme_goster $sayac $toplam
+    done
+    echo -e "\n\n${BOLD}${BG_PURPLE}${TEXT_BLACK} ✨ NUKED! Komple temizlik bitti. $basarili dosya sıfırlandı. ${RESET}"; sleep 2.5
 }
 
 kapak_gom() {
-    [ ! -f "$VARSAYILAN_RESIM" ] && { echo -e "${RED}Önce resim seç kanka!${RESET}"; sleep 2; return; }
+    [ ! -f "$VARSAYILAN_RESIM" ] && { echo -e "${BLINK}${RED}❌ Önce Albüm Kapağı Seç kanka!${RESET}"; sleep 2; return; }
     _klasor_sec || return
-    echo -e "${CYAN}Sadece '$SON_KLASOR' klasöründeki resimler işleniyor...${RESET}"
+    mapfile -t dosyalar < <(find "$SON_KLASOR" -maxdepth 1 -type f \( -iname "*.mp3" -o -iname "*.m4a" \))
+    toplam=${#dosyalar[@]}; [[ $toplam -eq 0 ]] && { echo -e "${RED}İçeride müzik yok!${RESET}"; sleep 1; return; }
     
-    find "$SON_KLASOR" -maxdepth 1 -type f \( -iname "*.mp3" -o -iname "*.m4a" \) | while read -r muzik; do
-        tmp="$SON_KLASOR/.tmp_$$.tmp"
-        ffmpeg -i "$muzik" -i "$VARSAYILAN_RESIM" -map 0:a:0 -map 1:0 -acodec copy -id3v2_version 3 -c:v:0 mjpeg -disposition:v:0 attached_pic -y -loglevel quiet "$tmp" && mv "$tmp" "$muzik"
+    basarili=0; hatali=0; sayac=0
+    echo -e "\n${BOLD}${CYAN}🖼️  Kapak resimleri gömülüyor, sabırlı ol kanka...${RESET}\n"
+    for muzik in "${dosyalar[@]}"; do
+        ((sayac++)); tmp="$SON_KLASOR/.tmp_$$.tmp"
+        ffmpeg -i "$muzik" -i "$VARSAYILAN_RESIM" -map 0:a:0 -map 1:0 -acodec copy -id3v2_version 3 -c:v:0 mjpeg -disposition:v:0 attached_pic -y -loglevel quiet "$tmp" && mv "$tmp" "$muzik" && ((basarili++)) || ((hatali++))
+        _ilerleme_goster $sayac $toplam
     done
-    echo -e "${GREEN}✓ Kapak işleme bitti!${RESET}"; sleep 2
+    echo -e "\n\n${BOLD}${GREEN}✅ BAŞARILI: $basarili${RESET} | ${BOLD}${RED}❌ HATALI: $hatali${RESET}"; sleep 2.5
 }
 
-# ANA MENÜ
 while true; do
     clear
-    echo -e "${MAGENTA}--- 🎶 ÖZEL MÜZİK KONTROLÜ 🎶 ---${RESET}"
-    echo -e "  [1] İsimleri Temizle + Prefix Ekle"
-    echo -e "  [2] Kapak Resmi Ekle (Sadece Seçili Klasör)"
-    echo -e "  [3] Albüm Kapağı Seç (Resim Yolu)"
-    echo -e "  [0] Çıkış"
-    read -p " Seçim: " secim
+    echo -e "${BOLD}${CYAN}╔════════════════════════════════════════════════════════════╗${RESET}"
+    echo -e "${BOLD}${RED}  ██████╗  █████╗ ██╗         ███████╗██╗██╗     ███╗   ███╗${RESET}"
+    echo -e "${BOLD}${YELLOW}  ╚════██╗██╔══██╗██║         ██╔════╝██║██║     ████╗ ████║${RESET}"
+    echo -e "${BOLD}${GREEN}   █████╔╝███████║██║         █████╗  ██║██║     ██╔████╔██║${RESET}"
+    echo -e "${BOLD}${BLUE}   ██╔═══╝ ██╔══██║██║         ██╔══╝  ██║██║     ██║╚██╔╝██║${RESET}"
+    echo -e "${BOLD}${MAGENTA}   ███████╗██║  ██║███████╗    ██║     ██║███████╗██║ ╚═╝ ██║${RESET}"
+    echo -e "${BOLD}${CYAN}   ╚══════╝╚═╝  ╚═╝╚══════╝    ╚═╝     ╚═╝╚══════╝╚═╝     ╚═╝${RESET}"
+    echo -e "${BOLD}${CYAN}╚════════════════════════════════════════════════════════════╝${RESET}"
+    echo -e "                   ${BOLD}${BLINK}${BG_PURPLE}${TEXT_BLACK} 🌟 ZAL FILM SOUNDBOX v4.0 🌟 ${RESET}\n"
+    
+    echo -e "  ${WHITE}🖼️  Kapak Resmi :${RESET} ${BOLD}${YELLOW}${VARSAYILAN_RESIM:-'AYARLANMAMIŞ'}${RESET}"
+    echo -e "  ${WHITE}📂 Aktif Dizin  :${RESET} ${BOLD}${BLUE}${SON_KLASOR:-'SEÇİLMEMİŞ'}${RESET}"
+    echo -e "${BOLD}${CYAN}──────────────────────────────────────────────────────────────${RESET}"
+    echo -e "  ${BOLD}${MAGENTA}⚡ ŞEKİLLİ MENÜ SEÇENEKLERİ:${RESET}"
+    echo -e "  ${BOLD}${GREEN}[1]${RESET} 🏷️  İsimleri Düzenle + Reklam Ekle (Normal Mod)"
+    echo -e "  ${BOLD}${GREEN}[2]${RESET} 🖼️  Müziklere Albüm Kapağı Göm"
+    echo -e "  ${BOLD}${RED}[3]💥 KOMPLE TEMİZLİK YAP (İsimleri Sil, Sadece Marka Bırak)${RESET}"
+    echo -e "  ${BOLD}${GREEN}[4]${RESET} 🎨 Albüm Kapağı Seç / Değiştir"
+    echo -e "  ${BOLD}${YELLOW}[0]${RESET} 🚪 Güvenli Çıkış"
+    echo -e "${BOLD}${CYAN}==============================================================${RESET}"
+    read -p "  İşlem Numarası ❯ " secim
+
     case $secim in
         1) isim_temizle_ve_etiketle ;;
         2) kapak_gom ;;
-        3) read -p "Resim yolu: " yeni_r; [ -f "$yeni_r" ] && VARSAYILAN_RESIM="$yeni_r" && _kaydet_ayarlar ;;
-        0) break ;;
+        3) komple_temizlik_yap ;;
+        4) read -p "  Resim Yolu ❯ " yeni_r; [ -f "$yeni_r" ] && VARSAYILAN_RESIM="$yeni_r" && _kaydet_ayarlar ;;
+        0) echo -e "\n${BOLD}${CYAN}Zal Film Soundbox kapandı. Güle güle kanka! 👋${RESET}"; exit 0 ;;
+        *) echo -e "${BLINK}${RED}Geçersiz Tuşlama!${RESET}"; sleep 1 ;;
     esac
 done
